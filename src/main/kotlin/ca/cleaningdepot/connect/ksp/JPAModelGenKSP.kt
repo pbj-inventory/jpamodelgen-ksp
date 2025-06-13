@@ -88,7 +88,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
             properties.add(
                 PropertySpec.builder(
                     property.simpleName.asString(),
-                    attributeType.getAttribute(originalClassName, propertyType),
+                    attributeType.getAttribute(clazz.asStarProjectedType().toTypeName(), propertyType),
                     KModifier.LATEINIT
                 )
                     .addKdoc("@see %L.%L", originalClassName.canonicalName, property.simpleName.asString())
@@ -97,7 +97,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                     .mutable()
                     .build()
             )
-            val typeVariable = TypeVariableName.invoke("T", originalClassName)
+            val typeVariable = TypeVariableName.invoke("T", clazz.asStarProjectedType().toTypeName())
             functions.add(
                 PropertySpec.builder(property.simpleName.asString() + "_", attributeType.getType(propertyType))
                     .addTypeVariables(if (clazz.isOpen()) listOf(typeVariable) else listOf())
@@ -168,9 +168,9 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
         val classType = if (clazz.isAbstract()) MappedSuperclassType::class else EntityType::class
         type.addProperty(
             PropertySpec.builder(
-                "class_", classType.asClassName().parameterizedBy(
-                    TypeVariableName(originalClassName.canonicalName),
-                ), KModifier.LATEINIT
+                "class_",
+                classType.asClassName().parameterizedBy(clazz.asStarProjectedType().toTypeName()),
+                KModifier.LATEINIT
             ).addKdoc("@see %L", originalClassName.canonicalName).addAnnotation(Volatile::class).mutable().build()
         )
         classMap[originalClassName] =
