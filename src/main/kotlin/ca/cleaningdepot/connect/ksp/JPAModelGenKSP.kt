@@ -70,7 +70,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
         val properties = mutableListOf<PropertySpec>()
         val functions = mutableListOf<PropertySpec>()
         val joinFunctions = mutableListOf<FunSpec>()
-        for (property in clazz.getAllProperties()) {
+        for (property in clazz.getAllProperties().distinctBy { it.simpleName.asString() }) {
             val propertyType = property.type.resolve()
             properties.add(
                 PropertySpec.builder(
