@@ -72,10 +72,18 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
         val joinFunctions = mutableListOf<FunSpec>()
         for (property in clazz.getAllProperties().distinctBy { it.simpleName.asString() }) {
             val propertyType = property.type.resolve()
+            val deprecatedAnnotation =
+                property.annotations.find { it.shortName.asString() == Deprecated::class.simpleName }
+            val deprecatedAnnotations = deprecatedAnnotation?.let {
+                listOf(
+                    AnnotationSpec.builder(Deprecated::class.asClassName())
+                        .addMember("%S", deprecatedAnnotation.arguments.firstOrNull()?.value ?: "").build()
+                )
+            } ?: emptyList()
             properties.add(
                 PropertySpec.builder(
                     camelToShoutCase(property.simpleName.asString()), String::class.asClassName(), KModifier.CONST
-                ).initializer("%S", property.simpleName.asString()).build()
+                ).initializer("%S", property.simpleName.asString()).addAnnotations(deprecatedAnnotations).build()
             )
             val parentClass = property.parentDeclaration as? KSClassDeclaration
             if (clazz.qualifiedName != parentClass?.qualifiedName) continue
@@ -95,6 +103,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                     .addKdoc("@see %L.%L", originalClassName.canonicalName, property.simpleName.asString())
                     .addAnnotation(Volatile::class)
                     .addAnnotation(ClassName("org.springframework.aot.hint.annotation", "Reflective"))
+                    .addAnnotations(deprecatedAnnotations)
                     .mutable()
                     .build()
             )
@@ -112,6 +121,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                             .addCode("return this.get(%L.%L)", generatedClassName, property.simpleName.asString())
                             .build()
                     )
+                    .addAnnotations(deprecatedAnnotations)
                     .build()
             )
             if (property.isJoinable()) {
@@ -128,6 +138,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                         From::class.asClassName()
                             .parameterizedBy(STAR, if (clazz.isOpen()) typeVariable else originalClassName)
                     )
+                    .addAnnotations(deprecatedAnnotations)
                     .addCode(
                         "return this.join(%L.%L, %L)", generatedClassName, property.simpleName.asString(), joinType.name
                     )
@@ -155,6 +166,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                             ).build()
                         )
                         .addKdoc("@see %L.%L", declaringClassName.canonicalName, property.simpleName.asString())
+                        .addAnnotations(deprecatedAnnotations)
                         .build()
                 )
                 declaringClass.members.addFirst(typeSpec.build())
