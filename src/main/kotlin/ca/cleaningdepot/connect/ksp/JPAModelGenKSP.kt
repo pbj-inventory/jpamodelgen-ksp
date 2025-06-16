@@ -77,8 +77,9 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                     camelToShoutCase(property.simpleName.asString()), String::class.asClassName(), KModifier.CONST
                 ).initializer("%S", property.simpleName.asString()).build()
             )
-            if (clazz != property.parentDeclaration) continue
-            if (property.origin == Origin.KOTLIN_LIB) continue
+            val parentClass = property.parentDeclaration as? KSClassDeclaration
+            if (clazz.qualifiedName != parentClass?.qualifiedName) continue
+            if (property.origin == Origin.KOTLIN_LIB || property.origin == Origin.JAVA_LIB) continue
             if (property.isAbstract()) {
                 abstractProperties[propertyType.toClassName().canonicalName + " " + property.simpleName.asString()] =
                     originalClassName
@@ -98,12 +99,13 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                     .build()
             )
             val typeVariable = TypeVariableName.invoke("T", clazz.asStarProjectedType().toTypeName())
+            val shouldBeGeneric = clazz.isOpen() && attributeType == AttributeType.SINGULAR
             functions.add(
                 PropertySpec.builder(property.simpleName.asString() + "_", attributeType.getType(propertyType))
-                    .addTypeVariables(if (clazz.isOpen()) listOf(typeVariable) else listOf())
+                    .addTypeVariables(if (shouldBeGeneric) listOf(typeVariable) else listOf())
                     .receiver(
                         Path::class.asClassName()
-                            .parameterizedBy(if (clazz.isOpen()) typeVariable else originalClassName)
+                            .parameterizedBy(if (shouldBeGeneric) typeVariable else originalClassName)
                     )
                     .getter(
                         FunSpec.getterBuilder()
