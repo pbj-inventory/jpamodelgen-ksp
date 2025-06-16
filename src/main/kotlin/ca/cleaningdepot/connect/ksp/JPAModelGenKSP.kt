@@ -13,10 +13,7 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import com.squareup.kotlinpoet.ksp.writeTo
-import jakarta.persistence.ManyToMany
-import jakarta.persistence.ManyToOne
-import jakarta.persistence.OneToMany
-import jakarta.persistence.OneToOne
+import jakarta.persistence.*
 import jakarta.persistence.criteria.*
 import jakarta.persistence.metamodel.*
 import kotlin.reflect.KClass
@@ -72,8 +69,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
         val joinFunctions = mutableListOf<FunSpec>()
         for (property in clazz.getAllProperties().distinctBy { it.simpleName.asString() }) {
             val propertyType = property.type.resolve()
-            val deprecatedAnnotation =
-                property.annotations.find { it.shortName.asString() == Deprecated::class.simpleName }
+            val deprecatedAnnotation = property.getAnnotation(Deprecated::class)
             val deprecatedAnnotations = deprecatedAnnotation?.let {
                 listOf(
                     AnnotationSpec.builder(Deprecated::class.asClassName())
@@ -93,7 +89,8 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                     originalClassName
                 continue
             }
-            val attributeType = getAttributeType(propertyType)
+            val attributeType =
+                if (property.getAnnotation(Convert::class) == null) getAttributeType(propertyType) else AttributeType.SINGULAR
             properties.add(
                 PropertySpec.builder(
                     property.simpleName.asString(),
@@ -261,11 +258,12 @@ enum class AttributeType(
 }
 
 val joinableAnnotations = arrayOf(OneToOne::class, OneToMany::class, ManyToOne::class, ManyToMany::class)
-fun KSPropertyDeclaration.isJoinable(): Boolean {
-    for (klass in joinableAnnotations) {
-        if (this.annotations.any {
-                it.shortName.getShortName() == klass.simpleName && it.annotationType.resolve().declaration.qualifiedName?.asString() == klass.qualifiedName
-            }) return true
+fun KSAnnotated.getAnnotation(klass: KClass<out Annotation>): KSAnnotation? {
+    return this.annotations.find {
+        it.shortName.getShortName() == klass.simpleName && it.annotationType.resolve().declaration.qualifiedName?.asString() == klass.qualifiedName
     }
-    return false
+}
+
+fun KSAnnotated.isJoinable(): Boolean {
+    return joinableAnnotations.any { getAnnotation(it) != null }
 }
