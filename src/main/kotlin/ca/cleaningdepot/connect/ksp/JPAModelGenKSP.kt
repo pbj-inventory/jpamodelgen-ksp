@@ -24,7 +24,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
     private lateinit var set: KSClassDeclaration
     private lateinit var list: KSClassDeclaration
 
-    private var classMap = mutableMapOf<ClassName, FileSpec>()
+    private var classMap = mutableMapOf<ClassName, Pair<FileSpec, MutableList<KSFile>>>()
     private val abstractProperties = mutableMapOf<String, ClassName>()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
@@ -49,13 +49,14 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                 }
             }
         }
-        for (fileSpec in classMap.values) {
-            fileSpec.writeTo(environment.codeGenerator, Dependencies.ALL_FILES)
+        for ((fileSpec, dependencies) in classMap.values) {
+            fileSpec.writeTo(environment.codeGenerator, Dependencies(false, *dependencies.toTypedArray()))
         }
         return unresolvable
     }
 
     private fun buildObject(clazz: KSClassDeclaration) {
+        val originatingFile = clazz.containingFile ?: return
         val originalClassName = clazz.toClassName()
         val generatedClassName = ClassName(originalClassName.packageName, originalClassName.simpleName + "_")
         val file = FileSpec.builder(generatedClassName)
@@ -147,7 +148,8 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                 val declaringClassName =
                     abstractProperties.remove(propertyType.toClassName().canonicalName + " " + property.simpleName.asString())
                         ?: continue
-                val declaringClass = classMap[declaringClassName]?.toBuilder() ?: continue
+                val (fileSpec, dependencies) = classMap[declaringClassName] ?: continue
+                val declaringClass = fileSpec.toBuilder()
                 val typeSpec = (declaringClass.members.removeFirst() as TypeSpec).toBuilder()
                 val abstractAttributeType =
                     getAttributeType(propertyType).getAttribute(declaringClassName, propertyType)
@@ -167,7 +169,8 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                         .build()
                 )
                 declaringClass.members.addFirst(typeSpec.build())
-                classMap[declaringClassName] = declaringClass.build()
+                dependencies.add(originatingFile)
+                classMap[declaringClassName] = declaringClass.build() to dependencies
             }
         }
         properties.sortWith(
@@ -184,12 +187,9 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
                 KModifier.LATEINIT
             ).addKdoc("@see %L", originalClassName.canonicalName).addAnnotation(Volatile::class).mutable().build()
         )
-        classMap[originalClassName] =
-            file.addAnnotation(AnnotationSpec.builder(Suppress::class).addMember("%S", "warnings").build())
-            .addType(type.build())
-            .addProperties(functions)
-            .addFunctions(joinFunctions)
-            .build()
+        val fileSpec = file.addAnnotation(AnnotationSpec.builder(Suppress::class).addMember("%S", "warnings").build())
+            .addType(type.build()).addProperties(functions).addFunctions(joinFunctions).build()
+        classMap[originalClassName] = fileSpec to arrayListOf(originatingFile)
     }
 
     private fun getAttributeType(propertyType: KSType): AttributeType {
