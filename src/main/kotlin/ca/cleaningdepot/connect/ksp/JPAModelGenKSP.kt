@@ -69,6 +69,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
         val functions = mutableListOf<PropertySpec>()
         val joinFunctions = mutableListOf<FunSpec>()
         for (property in clazz.getAllProperties().distinctBy { it.simpleName.asString() }) {
+            if (property.getAnnotation(Transient::class) != null) continue
             val propertyType = property.type.resolve()
             val deprecatedAnnotation = property.getAnnotation(Deprecated::class)
             val deprecatedAnnotations = deprecatedAnnotation?.let {
@@ -215,7 +216,7 @@ class JPAModelGenKSP(private val environment: SymbolProcessorEnvironment) : Symb
     private fun camelToShoutCase(str: String): String = str.replace(Regex("([a-z])([A-Z])"), "$1_$2").uppercase()
 }
 
-enum class AttributeType(
+private enum class AttributeType(
     private val klass: KClass<*>,
     private val attributeKlass: KClass<out Attribute<*, *>>,
     private val joinKlass: KClass<out Join<*, *>>
@@ -257,13 +258,13 @@ enum class AttributeType(
     }
 }
 
-val joinableAnnotations = arrayOf(OneToOne::class, OneToMany::class, ManyToOne::class, ManyToMany::class)
-fun KSAnnotated.getAnnotation(klass: KClass<out Annotation>): KSAnnotation? {
+private val joinableAnnotations = arrayOf(OneToOne::class, OneToMany::class, ManyToOne::class, ManyToMany::class)
+private fun KSAnnotated.getAnnotation(klass: KClass<out Annotation>): KSAnnotation? {
     return this.annotations.find {
         it.shortName.getShortName() == klass.simpleName && it.annotationType.resolve().declaration.qualifiedName?.asString() == klass.qualifiedName
     }
 }
 
-fun KSAnnotated.isJoinable(): Boolean {
+private fun KSAnnotated.isJoinable(): Boolean {
     return joinableAnnotations.any { getAnnotation(it) != null }
 }
